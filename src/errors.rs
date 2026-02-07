@@ -43,8 +43,4 @@ impl From<tokio::task::JoinError> for AppError {
 }
 
 // Add map_err support
-impl AppError {
-    pub fn forbidden() -> Self {
-        AppError::AuthError("Forbidden".to_string())
-    }
-}
+impl AppError {}

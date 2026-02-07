@@ -3,7 +3,7 @@ use axum::{
         ws::{Message as WsMessage, WebSocket},
         FromRequestParts, Path, State, WebSocketUpgrade,
     },
-    http::{request::Parts, StatusCode},
+    http::request::Parts,
     response::IntoResponse,
     Json, RequestPartsExt,
 };
@@ -13,7 +13,6 @@ use axum_extra::{
 };
 use futures::{sink::SinkExt, stream::StreamExt};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
-use sqlx::Row;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
 
@@ -23,6 +22,7 @@ use crate::models::{AppState, AuthResponse, Claims, CreateUser, Message, SendMes
 const JWT_EXPIRATION: usize = 3600 * 24; // 24 hours
 
 // --- Authentication Extractor ---
+#[derive(Clone)]
 pub struct AuthenticatedUser {
     pub user_id: i64,
     pub username: String,
@@ -123,6 +123,15 @@ pub async fn send_message_handler(
     auth: AuthenticatedUser,
     Json(payload): Json<SendMessage>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    process_message(&state, &auth, payload).await?;
+    Ok(Json(serde_json::json!({"status": "sent"})))
+}
+
+async fn process_message(
+    state: &AppState,
+    auth: &AuthenticatedUser,
+    payload: SendMessage,
+) -> Result<(), AppError> {
     // Check receiver exists
     let receiver_opt: Option<User> = sqlx::query_as!(
         User,
@@ -162,11 +171,7 @@ pub async fn send_message_handler(
         let _ = sender_tx.send(msg_out.to_string());
     }
 
-    // Also consider sending to self if connected (optional, but good for multi-window)
-    // The prompt says "support the 'scratch zone' (sending to self)". This is handled by normal logic if receiver == sender.
-    // If receiver != sender, sender might want to see it too? Usually yes. But let's stick to prompt: "If the recipient has an active WebSocket, push the message to them".
-
-    Ok(Json(serde_json::json!({"status": "sent"})))
+    Ok(())
 }
 
 pub async fn get_history_handler(
@@ -186,7 +191,6 @@ pub async fn get_history_handler(
     let target = target_opt.ok_or(AppError::BadRequest("Target user not found".to_string()))?;
 
     // Retrieve messages where (sender=me AND receiver=them) OR (sender=them AND receiver=me)
-    // If scratch zone (me == them), this simplifies to sender=me AND receiver=me
 
     let messages = sqlx::query_as!(
         Message,
@@ -210,11 +214,6 @@ pub async fn get_history_handler(
 
 pub async fn ws_handler(
     State(state): State<AppState>,
-    // Need to validate JWT manually or from query param since TypedHeader doesn't work well with upgrade request directly unless header is present
-    // But usually WS connection starts with a GET request which can have headers.
-    // However, JS WebSocket API doesn't support headers easily.
-    // The prompt says "Middleware: Create an Axum Layer or extractor that validates the JWT for all protected routes and the WebSocket upgrade".
-    // If using headers, we can use the extractor.
     auth: AuthenticatedUser,
     ws: WebSocketUpgrade,
 ) -> impl IntoResponse {
@@ -225,14 +224,6 @@ async fn handle_socket(socket: WebSocket, state: AppState, auth: AuthenticatedUs
     let (mut sender, mut receiver) = socket.split();
 
     // Check if user already has a broadcast channel
-    // We want to reuse the channel or create new if not exists.
-    // Actually DashMap stores a sender that broadcasts to all receivers for that user.
-    // If no channel exists, create one.
-
-    // Using entry API to ensure only one channel per user?
-    // Wait, broadcast::channel returns (tx, rx). We store tx.
-    // If tx exists, we subscribe rx.
-
     let tx = state
         .active_connections
         .entry(auth.username.clone())
@@ -254,13 +245,17 @@ async fn handle_socket(socket: WebSocket, state: AppState, auth: AuthenticatedUs
         }
     });
 
-    // Handle incoming messages (optional, maybe ping/pong?)
-    // While the user is connected, we stick around.
-
+    // Handle incoming messages
     let mut recv_task = tokio::spawn(async move {
         while let Some(Ok(msg)) = receiver.next().await {
-            // We can process incoming messages if desired, but functionality is mainly push from POST /send
             match msg {
+                WsMessage::Text(text) => {
+                    if let Ok(payload) = serde_json::from_str::<SendMessage>(&text) {
+                        if let Err(e) = process_message(&state, &auth, payload).await {
+                            tracing::error!("Failed to process WS message: {:?}", e);
+                        }
+                    }
+                }
                 WsMessage::Close(_) => break,
                 _ => {}
             }
@@ -272,9 +267,4 @@ async fn handle_socket(socket: WebSocket, state: AppState, auth: AuthenticatedUs
         _ = (&mut send_task) => recv_task.abort(),
         _ = (&mut recv_task) => send_task.abort(),
     };
-
-    // Cleanup? We don't remove the channel from DashMap immediately because other connections (tabs) might use it.
-    // However, if no receivers remain, we might want to cleanup.
-    // broadcast::Sender doesn't have a way to check receiver count easily without lock.
-    // For MVP, leaving it in DashMap is fine, or simple check on drop.
 }

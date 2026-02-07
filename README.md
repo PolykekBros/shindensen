@@ -54,8 +54,11 @@ The server listens on `0.0.0.0:3000`.
 ### WebSocket
 
 - `GET /ws` (Protected)
-    - Headers: `Authorization: Bearer <token>` (Note: Browsers JS API doesn't support headers easily, usually passed via query param or cookies, but this MVP uses Bearer token extractor).
-    - Connects to real-time stream.
+    - Headers: `Authorization: Bearer <token>`
+    - **Bidirectional**:
+        - **Receive**: Real-time stream of incoming messages.
+        - **Send**: Send messages as JSON strings over the WebSocket.
+        - **Format**: `{ "receiver_username": "bob", "content": "Hello via WS" }`
 
 ## Testing
 
