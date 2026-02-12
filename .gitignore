@@ -1,3 +1,10 @@
+# Rust artifacts
 /target
+
+# SQLite database and temporary files
 *.db
+*.db-shm
+*.db-wal
+
+# Environment variables
 .env

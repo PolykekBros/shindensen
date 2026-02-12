@@ -12,21 +12,48 @@ A simple messenger backend built with Axum, Tokio, sqlx (SQLite), and jsonwebtok
 
 ## Installation
 
-1. Ensure you have Rust installed.
-2. The SQLite database `messenger.db` is already initialized. If not, install `sqlite3` and run:
+1. **Rust**: Ensure you have [Rust](https://www.rust-lang.org/tools/install) installed.
+2. **Environment**: Create a `.env` file (one is provided in the root):
+   ```env
+   DATABASE_URL="sqlite:shindensen.db"
+   JWT_SECRET="supersecret"
+   ```
+3. **Database & Migrations**: 
+   Install `sqlx-cli` if you haven't already:
    ```sh
-   sqlite3 messenger.db "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL); CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, sender_id INTEGER NOT NULL, receiver_id INTEGER NOT NULL, content TEXT NOT NULL, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP);"
+   brew install sqlx-cli
    ```
-3. Create `.env` file (already provided):
-   ```
-   DATABASE_URL="sqlite:messenger.db"
-   JWT_SECRET="secret"
+   Create the database and run migrations:
+   ```sh
+   sqlx database create
+   sqlx migrate run
    ```
 
 ## Running
 
 ```sh
 cargo run
+```
+
+## Database Migrations
+
+This project uses `sqlx` for database migrations.
+
+### Creating a new migration
+To add a new schema change, run:
+```sh
+sqlx migrate add <description>
+```
+This will create a new SQL file in the `migrations/` directory.
+
+### Applying migrations
+```sh
+sqlx migrate run
+```
+
+### Reverting migrations
+```sh
+sqlx migrate revert
 ```
 
 The server listens on `0.0.0.0:3000`.
