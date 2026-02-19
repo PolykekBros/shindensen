@@ -1,7 +1,7 @@
 use axum::{
     extract::{
         ws::{Message as WsMessage, WebSocket},
-        FromRequestParts, Path, State, WebSocketUpgrade,
+        FromRef, FromRequestParts, Path, State, WebSocketUpgrade,
     },
     http::request::Parts,
     response::IntoResponse,
@@ -16,15 +16,19 @@ use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation}
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
 
-use crate::errors::AppError;
-use crate::models::{AppState, AuthResponse, Claims, CreateUser, Message, SendMessage, User};
+use crate::models::{
+    AppState, AuthResponse, Claims, CreateUser, InitiateChat, Message, User, UserId, WsMessageIn,
+};
+use crate::{
+    errors::AppError,
+    models::{ChatStatus, InitiateDirectChatResponse},
+};
 
 const JWT_EXPIRATION: usize = 3600 * 24; // 24 hours
 
-// --- Authentication Extractor ---
 #[derive(Clone)]
 pub struct AuthenticatedUser {
-    pub user_id: i64,
+    pub user_id: UserId,
     pub username: String,
 }
 
@@ -37,23 +41,18 @@ where
     type Rejection = AppError;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        // Extract the token from the Authorization header
         let TypedHeader(Authorization(bearer)) = parts
             .extract::<TypedHeader<Authorization<Bearer>>>()
             .await
             .map_err(|_| AppError::AuthError("Missing Authorization header".to_string()))?;
-
         let app_state = AppState::from_ref(state);
         let jwt_secret = &app_state.jwt_secret;
-
-        // Decode the token
         let token_data = decode::<Claims>(
             bearer.token(),
             &DecodingKey::from_secret(jwt_secret.as_bytes()),
             &Validation::default(),
         )
         .map_err(|_| AppError::AuthError("Invalid token".to_string()))?;
-
         Ok(AuthenticatedUser {
             user_id: token_data.claims.user_id,
             username: token_data.claims.username,
@@ -61,41 +60,34 @@ where
     }
 }
 
-// Need to define FromRef for AppState -> AppState (Identity)
-use axum::extract::FromRef;
-
-// --- Handlers ---
-
 pub async fn login_handler(
     State(state): State<AppState>,
     Json(payload): Json<CreateUser>,
 ) -> Result<Json<AuthResponse>, AppError> {
-    // Check if user exists
-    let user_opt: Option<User> = sqlx::query_as!(
+    let user: Option<User> = sqlx::query_as!(
         User,
-        r#"SELECT id as "id!", username as "username!" FROM users WHERE username = ?"#,
+        r#"SELECT id as "id!", username as "username!", profile_file_id FROM users WHERE username = ?"#,
         payload.username
     )
     .fetch_optional(&state.pool)
     .await?;
-
-    let user = match user_opt {
+    let user = match user {
         Some(u) => u,
         None => {
-            // Create user
-            let id = sqlx::query!("INSERT INTO users (username) VALUES (?)", payload.username)
-                .execute(&state.pool)
-                .await?
-                .last_insert_rowid();
+            let id = sqlx::query_scalar!(
+                "INSERT INTO users (username) VALUES (?) RETURNING id",
+                payload.username
+            )
+            .fetch_one(&state.pool)
+            .await?;
 
             User {
                 id,
                 username: payload.username.clone(),
+                profile_file_id: None,
             }
         }
     };
-
-    // Generate JWT
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -107,107 +99,240 @@ pub async fn login_handler(
         username: user.username.clone(),
         exp: now + JWT_EXPIRATION,
     };
-
     let token = encode(
         &Header::default(),
         &claims,
         &EncodingKey::from_secret(state.jwt_secret.as_bytes()),
     )
     .map_err(|_| AppError::InternalServerError("Token creation failed".to_string()))?;
-
     Ok(Json(AuthResponse { token }))
 }
 
-pub async fn send_message_handler(
+pub async fn initiate_direct_chat_handler(
     State(state): State<AppState>,
     auth: AuthenticatedUser,
-    Json(payload): Json<SendMessage>,
-) -> Result<Json<serde_json::Value>, AppError> {
-    process_message(&state, &auth, payload).await?;
-    Ok(Json(serde_json::json!({"status": "sent"})))
+    Json(payload): Json<InitiateChat>,
+) -> Result<Json<InitiateDirectChatResponse>, AppError> {
+    let target = sqlx::query_as!(
+        User,
+        r#"SELECT id as "id!", username as "username!", profile_file_id FROM users WHERE username = ?"#,
+        payload.target_username
+    )
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or(AppError::BadRequest("Target user not found".to_string()))?;
+    let chat_id = sqlx::query_scalar!(
+        r#"
+        SELECT c.id
+        FROM chats c
+        JOIN chat_participants cp1 ON c.id = cp1.chat_id
+        JOIN chat_participants cp2 ON c.id = cp2.chat_id
+        WHERE c.type = 'direct'
+          AND cp1.user_id = ?
+          AND cp2.user_id = ?
+        LIMIT 1
+        "#,
+        auth.user_id,
+        target.id
+    )
+    .fetch_optional(&state.pool)
+    .await?;
+    if let Some(chat_id) = chat_id {
+        return Ok(Json(InitiateDirectChatResponse {
+            chat_id,
+            status: ChatStatus::Exists,
+        }));
+    }
+    let mut tx = state.pool.begin().await?;
+    let chat_id = sqlx::query_scalar!("INSERT INTO chats (type) VALUES (?) RETURNING id", "direct")
+        .fetch_one(&mut *tx)
+        .await?;
+    sqlx::query!(
+        "INSERT INTO chat_participants (chat_id, user_id) VALUES (?, ?), (?, ?)",
+        chat_id,
+        auth.user_id,
+        chat_id,
+        target.id
+    )
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(Json(InitiateDirectChatResponse {
+        chat_id,
+        status: ChatStatus::Created,
+    }))
 }
 
 async fn process_message(
     state: &AppState,
     auth: &AuthenticatedUser,
-    payload: SendMessage,
+    payload: WsMessageIn,
 ) -> Result<(), AppError> {
-    // Check receiver exists
-    let receiver_opt: Option<User> = sqlx::query_as!(
-        User,
-        r#"SELECT id as "id!", username as "username!" FROM users WHERE username = ?"#,
-        payload.receiver_username
+    // Validation
+    let has_content = payload.content.as_ref().map(|s| !s.trim().is_empty()).unwrap_or(false);
+    let files_in = payload.files.unwrap_or_default();
+    let has_files = !files_in.is_empty();
+
+    if !has_content && !has_files {
+        return Err(AppError::BadRequest("Message must have text or at least one file".to_string()));
+    }
+
+    if files_in.len() > 10 {
+        return Err(AppError::BadRequest("Maximum 10 files allowed per message".to_string()));
+    }
+
+    for file in &files_in {
+        if file.size_bytes > 10 * 1024 * 1024 {
+            return Err(AppError::BadRequest(format!("File {} exceeds 10MB limit", file.filename)));
+        }
+    }
+
+    let is_participant = sqlx::query_scalar!(
+        "SELECT 1 FROM chat_participants WHERE chat_id = ? AND user_id = ?",
+        payload.chat_id,
+        auth.user_id
     )
     .fetch_optional(&state.pool)
-    .await?;
+    .await?
+    .is_some();
+    if !is_participant {
+        return Err(AppError::AuthError(
+            "Not authorized to send to this chat".to_string(),
+        ));
+    }
 
-    let receiver = receiver_opt.ok_or(AppError::BadRequest("Receiver not found".to_string()))?;
-
-    // Create message with timestamp
-    // ISO 8601 format
     let timestamp = chrono::Utc::now().to_rfc3339();
+    
+    let mut tx = state.pool.begin().await?;
 
-    // Insert into DB
-    sqlx::query!(
-        "INSERT INTO messages (sender_id, receiver_id, content, timestamp) VALUES (?, ?, ?, ?)",
+    let message_id = sqlx::query_scalar!(
+        "INSERT INTO messages (chat_id, sender_id, content, timestamp) VALUES (?, ?, ?, ?) RETURNING id",
+        payload.chat_id,
         auth.user_id,
-        receiver.id,
         payload.content,
         timestamp
     )
-    .execute(&state.pool)
+    .fetch_one(&mut *tx)
     .await?;
 
-    // Check if receiver is connected via WebSocket
-    if let Some(sender_tx) = state.active_connections.get(&receiver.username) {
-        // Send message to receiver
-        // Format the message as JSON string
-        let msg_out = serde_json::json!({
-            "sender": auth.username,
-            "content": payload.content,
-            "timestamp": timestamp
-        });
+    let mut db_files = Vec::new();
 
-        let _ = sender_tx.send(msg_out.to_string());
+    for file_in in files_in {
+        let file_id = sqlx::query_scalar!(
+            r#"
+            INSERT INTO files (type, url, filename, mime_type, size_bytes)
+            VALUES (?, ?, ?, ?, ?) RETURNING id
+            "#,
+            file_in.r#type,
+            file_in.url,
+            file_in.filename,
+            file_in.mime_type,
+            file_in.size_bytes
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+
+        sqlx::query!(
+            "INSERT INTO message_files (message_id, file_id) VALUES (?, ?)",
+            message_id,
+            file_id
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        db_files.push(crate::models::MediaAsset {
+            id: file_id,
+            r#type: file_in.r#type,
+            url: file_in.url,
+            filename: file_in.filename,
+            mime_type: file_in.mime_type,
+            size_bytes: file_in.size_bytes,
+            created_at: timestamp.clone(),
+        });
     }
 
+    tx.commit().await?;
+
+    struct Participant {
+        username: String,
+    }
+    let participants = sqlx::query_as!(
+        Participant,
+        r#"
+        SELECT u.username as "username!"
+        FROM chat_participants cp
+        JOIN users u ON cp.user_id = u.id
+        WHERE cp.chat_id = ?
+        "#,
+        payload.chat_id
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    let msg = Message {
+        id: message_id,
+        chat_id: payload.chat_id,
+        sender_id: auth.user_id,
+        content: payload.content,
+        timestamp,
+        files: db_files,
+    };
+    
+    let msg_json = serde_json::to_string(&msg).unwrap();
+    for p in participants {
+        if let Some(sender_tx) = state.active_connections.get(&p.username) {
+            let _ = sender_tx.send(msg_json.clone());
+        }
+    }
     Ok(())
 }
 
 pub async fn get_history_handler(
     State(state): State<AppState>,
     auth: AuthenticatedUser,
-    Path(target_username): Path<String>,
+    Path(chat_id): Path<i64>,
 ) -> Result<Json<Vec<Message>>, AppError> {
-    // Find target user
-    let target_opt: Option<User> = sqlx::query_as!(
-        User,
-        r#"SELECT id as "id!", username as "username!" FROM users WHERE username = ?"#,
-        target_username
-    )
-    .fetch_optional(&state.pool)
-    .await?;
-
-    let target = target_opt.ok_or(AppError::BadRequest("Target user not found".to_string()))?;
-
-    // Retrieve messages where (sender=me AND receiver=them) OR (sender=them AND receiver=me)
-
-    let messages = sqlx::query_as!(
-        Message,
-        r#"
-        SELECT id as "id!", sender_id as "sender_id!", receiver_id as "receiver_id!", content as "content!", CAST(timestamp AS TEXT) as "timestamp!"
-        FROM messages
-        WHERE (sender_id = ? AND receiver_id = ?)
-           OR (sender_id = ? AND receiver_id = ?)
-        ORDER BY timestamp ASC
-        "#,
-        auth.user_id,
-        target.id,
-        target.id,
+    let is_participant = sqlx::query_scalar!(
+        "SELECT 1 FROM chat_participants WHERE chat_id = ? AND user_id = ?",
+        chat_id,
         auth.user_id
     )
+    .fetch_optional(&state.pool)
+    .await?
+    .is_some();
+    if !is_participant {
+        return Err(AppError::AuthError(
+            "Not authorized to view this chat".to_string(),
+        ));
+    }
+
+    let mut messages = sqlx::query_as::<_, Message>(
+        r#"
+        SELECT id, chat_id, sender_id, content, timestamp
+        FROM messages
+        WHERE chat_id = ?
+        ORDER BY timestamp ASC
+        "#
+    )
+    .bind(chat_id)
     .fetch_all(&state.pool)
     .await?;
+
+    for msg in &mut messages {
+        let files = sqlx::query_as!(
+            crate::models::MediaAsset,
+            r#"
+            SELECT f.id as "id!", f.type as "type: crate::models::FileType", f.url as "url!", f.filename as "filename!", f.mime_type, f.size_bytes as "size_bytes!", f.created_at as "created_at!"
+            FROM files f
+            JOIN message_files mf ON f.id = mf.file_id
+            WHERE mf.message_id = ?
+            "#,
+            msg.id
+        )
+        .fetch_all(&state.pool)
+        .await?;
+        msg.files = files;
+    }
 
     Ok(Json(messages))
 }
@@ -222,8 +347,6 @@ pub async fn ws_handler(
 
 async fn handle_socket(socket: WebSocket, state: AppState, auth: AuthenticatedUser) {
     let (mut sender, mut receiver) = socket.split();
-
-    // Check if user already has a broadcast channel
     let tx = state
         .active_connections
         .entry(auth.username.clone())
@@ -232,10 +355,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, auth: AuthenticatedUs
             tx
         })
         .clone();
-
     let mut rx = tx.subscribe();
-
-    // Spawn task to forward broadcast messages to websocket
     let mut send_task = tokio::spawn(async move {
         while let Ok(msg) = rx.recv().await {
             if let Err(_e) = sender.send(WsMessage::Text(msg)).await {
@@ -244,15 +364,14 @@ async fn handle_socket(socket: WebSocket, state: AppState, auth: AuthenticatedUs
             }
         }
     });
-
-    // Handle incoming messages
     let mut recv_task = tokio::spawn(async move {
         while let Some(Ok(msg)) = receiver.next().await {
             match msg {
                 WsMessage::Text(text) => {
-                    if let Ok(payload) = serde_json::from_str::<SendMessage>(&text) {
+                    if let Ok(payload) = serde_json::from_str::<WsMessageIn>(&text) {
                         if let Err(e) = process_message(&state, &auth, payload).await {
                             tracing::error!("Failed to process WS message: {:?}", e);
+                            // Optionally send error back to user via WS?
                         }
                     }
                 }
@@ -261,8 +380,6 @@ async fn handle_socket(socket: WebSocket, state: AppState, auth: AuthenticatedUs
             }
         }
     });
-
-    // Wait for either task to finish
     tokio::select! {
         _ = (&mut send_task) => recv_task.abort(),
         _ = (&mut recv_task) => send_task.abort(),

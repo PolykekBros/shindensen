@@ -67,26 +67,32 @@ The server listens on `0.0.0.0:3000`.
     - Returns: `{ "token": "..." }`
     - Creates user if not exists.
 
-### Messaging
+### Chats
 
-- `POST /send` (Protected)
+- `POST /chats/initiate` (Protected)
     - Headers: `Authorization: Bearer <token>`
-    - Body: `{ "receiver_username": "bob", "content": "Hello" }`
-    - Saves message and pushes to Bob if he is connected via WebSocket.
+    - Body: `{ "target_username": "bob" }`
+    - Returns: `{ "chat_id": 1, "status": "created" }` (or "exists")
+    - Starts a direct chat with another user.
 
-- `GET /history/:username` (Protected)
+- `GET /chats/:chat_id/messages` (Protected)
     - Headers: `Authorization: Bearer <token>`
-    - Returns list of messages between authenticated user and target user.
+    - Returns list of messages in the chat.
+    - User must be a participant of the chat.
 
 ### WebSocket
 
 - `GET /ws` (Protected)
     - Headers: `Authorization: Bearer <token>`
     - **Bidirectional**:
-        - **Receive**: Real-time stream of incoming messages.
-        - **Send**: Send messages as JSON strings over the WebSocket.
-        - **Format**: `{ "receiver_username": "bob", "content": "Hello via WS" }`
+        - **Receive**: Real-time stream of incoming messages from ALL chats.
+            - Format: `{ "chat_id": 1, "sender": "bob", "content": "Hello", "timestamp": "..." }`
+        - **Send**: Send messages to a specific chat.
+            - Format: `{ "chat_id": 1, "content": "Hello via WS" }`
 
 ## Testing
 
-For testing WebSocket, you can use `wscat` or a custom client. Note that passing headers in standard `wscat` might need specific flags or just use a Rust client/Postman.
+1. **Login** (`POST /login`) to get a token.
+2. **Initiate Chat** (`POST /chats/initiate`) to get a `chat_id`.
+3. **Connect WebSocket** (`GET /ws`) with token.
+4. **Send Message** via WS: `{ "chat_id": <id>, "content": "Hello" }`.

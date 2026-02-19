@@ -1,0 +1,201 @@
+{
+    "_type": "export",
+    "__export_format": 4,
+    "__export_date": "2026-02-19T09:25:00.000Z",
+    "__export_source": "insomnia.desktop.app:v2023.5.8",
+    "resources": [
+        {
+            "_id": "wrk_shindensen_api",
+            "parentId": null,
+            "modified": 1708334400000,
+            "created": 1708334400000,
+            "name": "Shindensen API",
+            "description": "",
+            "scope": "collection",
+            "_type": "workspace"
+        },
+        {
+            "_id": "env_base",
+            "parentId": "wrk_shindensen_api",
+            "modified": 1708334400000,
+            "created": 1708334400000,
+            "name": "Base Environment",
+            "data": {
+                "base_url": "http://localhost:3000",
+                "token": ""
+            },
+            "dataPropertyOrder": {
+                "&": [
+                    "base_url",
+                    "token"
+                ]
+            },
+            "color": null,
+            "isPrivate": false,
+            "metaSortKey": 1708334400000,
+            "_type": "environment"
+        },
+        {
+            "_id": "req_login_alice",
+            "parentId": "wrk_shindensen_api",
+            "modified": 1708334400000,
+            "created": 1708334400000,
+            "url": "{{ _.base_url }}/login",
+            "name": "Login (Alice)",
+            "description": "",
+            "method": "POST",
+            "body": {
+                "mimeType": "application/json",
+                "text": "{\n  \"username\": \"alice\"\n}"
+            },
+            "parameters": [],
+            "headers": [
+                {
+                    "name": "Content-Type",
+                    "value": "application/json"
+                }
+            ],
+            "authentication": {},
+            "afterResponseScript": "const responseBody = JSON.parse(insomnia.response.body);\ninsomnia.environment.set(\"token\", responseBody.token);",
+            "metaSortKey": -1708334400000,
+            "isPrivate": false,
+            "settingStoreCookies": true,
+            "settingSendCookies": true,
+            "settingDisableRenderRequestBody": false,
+            "settingEncodeUrl": true,
+            "settingRebuildPath": true,
+            "settingFollowRedirects": "global",
+            "_type": "request"
+        },
+        {
+            "_id": "req_login_bob",
+            "parentId": "wrk_shindensen_api",
+            "modified": 1708334400000,
+            "created": 1708334400000,
+            "url": "{{ _.base_url }}/login",
+            "name": "Login (Bob)",
+            "description": "",
+            "method": "POST",
+            "body": {
+                "mimeType": "application/json",
+                "text": "{\n  \"username\": \"bob\"\n}"
+            },
+            "parameters": [],
+            "headers": [
+                {
+                    "name": "Content-Type",
+                    "value": "application/json"
+                }
+            ],
+            "authentication": {},
+            "afterResponseScript": "const responseBody = JSON.parse(insomnia.response.body);\ninsomnia.environment.set(\"token\", responseBody.token);",
+            "metaSortKey": -1708334300000,
+            "isPrivate": false,
+            "settingStoreCookies": true,
+            "settingSendCookies": true,
+            "settingDisableRenderRequestBody": false,
+            "settingEncodeUrl": true,
+            "settingRebuildPath": true,
+            "settingFollowRedirects": "global",
+            "_type": "request"
+        },
+        {
+            "_id": "req_initiate_chat",
+            "parentId": "wrk_shindensen_api",
+            "modified": 1708334400000,
+            "created": 1708334400000,
+            "url": "{{ _.base_url }}/chats/initiate",
+            "name": "Initiate Chat",
+            "description": "",
+            "method": "POST",
+            "body": {
+                "mimeType": "application/json",
+                "text": "{\n  \"target_username\": \"bob\"\n}"
+            },
+            "parameters": [],
+            "headers": [
+                {
+                    "name": "Content-Type",
+                    "value": "application/json"
+                }
+            ],
+            "authentication": {
+                "type": "bearer",
+                "token": "{{ _.token }}"
+            },
+            "metaSortKey": -1708334200000,
+            "isPrivate": false,
+            "settingStoreCookies": true,
+            "settingSendCookies": true,
+            "settingDisableRenderRequestBody": false,
+            "settingEncodeUrl": true,
+            "settingRebuildPath": true,
+            "settingFollowRedirects": "global",
+            "_type": "request"
+        },
+        {
+            "_id": "req_get_history",
+            "parentId": "wrk_shindensen_api",
+            "modified": 1708334400000,
+            "created": 1708334400000,
+            "url": "{{ _.base_url }}/chats/1/messages",
+            "name": "Get Message History",
+            "description": "Replace '1' with the actual chat_id from Initiate Chat response",
+            "method": "GET",
+            "body": {},
+            "parameters": [],
+            "headers": [],
+            "authentication": {
+                "type": "bearer",
+                "token": "{{ _.token }}"
+            },
+            "metaSortKey": -1708334100000,
+            "isPrivate": false,
+            "settingStoreCookies": true,
+            "settingSendCookies": true,
+            "settingDisableRenderRequestBody": false,
+            "settingEncodeUrl": true,
+            "settingRebuildPath": true,
+            "settingFollowRedirects": "global",
+            "_type": "request"
+        },
+        {
+            "_id": "req_ws_chat",
+            "parentId": "wrk_shindensen_api",
+            "modified": 1708334400000,
+            "created": 1708334400000,
+            "url": "ws://localhost:3000/ws",
+            "name": "WebSocket Chat",
+            "description": "Requires Authorization Header with Bearer token",
+            "method": "GET",
+            "body": {},
+            "parameters": [],
+            "headers": [
+                {
+                    "name": "Authorization",
+                    "value": "Bearer {{ _.token }}"
+                }
+            ],
+            "authentication": {},
+            "metaSortKey": -1708334000000,
+            "isPrivate": false,
+            "settingStoreCookies": true,
+            "settingSendCookies": true,
+            "settingDisableRenderRequestBody": false,
+            "settingEncodeUrl": true,
+            "settingRebuildPath": true,
+            "settingFollowRedirects": "global",
+            "_type": "websocket_request"
+        },
+        {
+            "_id": "ws_msg_hello",
+            "parentId": "req_ws_chat",
+            "modified": 1708334400000,
+            "created": 1708334400000,
+            "name": "Send Hello",
+            "value": "{\n  \"chat_id\": 1,\n  \"content\": \"Hello world from Insomnia!\"\n}",
+            "metaSortKey": -1708334400000,
+            "_type": "websocket_payload"
+        }
+    ]
+}
