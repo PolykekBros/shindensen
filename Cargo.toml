@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-axum = { version = "0.7.5", features = ["ws", "macros"] }
+axum = { version = "0.7.5", features = ["ws", "macros", "multipart"] }
 axum-extra = { version = "0.9", features = ["typed-header"] }
 tokio = { version = "1.38", features = ["full"] }
 sqlx = { version = "0.7.4", features = ["runtime-tokio", "sqlite", "macros", "chrono"] }
@@ -14,8 +14,9 @@ jsonwebtoken = "9.3"
 dashmap = "6.0"
 dotenvy = "0.15"
 tower = "0.4"
-tower-http = { version = "0.5.2", features = ["trace", "cors"] }
+tower-http = { version = "0.5.2", features = ["trace", "cors", "fs"] }
 futures = "0.3"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.8", features = ["v4"] }

@@ -7,6 +7,7 @@ use tokio::sync::broadcast;
 pub type UserId = i64;
 pub type ChatId = i64;
 pub type MessageId = i64;
+pub type FileId = i64;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -19,7 +20,7 @@ pub struct AppState {
 pub struct User {
     pub id: UserId,
     pub username: String,
-    pub profile_file_id: Option<i64>,
+    pub image_id: Option<FileId>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, sqlx::Type)]
@@ -57,7 +58,7 @@ pub enum FileType {
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Clone)]
 pub struct MediaAsset {
-    pub id: i64,
+    pub id: FileId,
     pub r#type: FileType,
     pub url: String,
     pub filename: String,
@@ -90,6 +91,14 @@ pub struct InitiateChat {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FileAssetIn {
     pub r#type: FileType,
+    pub url: String,
+    pub filename: String,
+    pub mime_type: Option<String>,
+    pub size_bytes: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FileUploadResponse {
     pub url: String,
     pub filename: String,
     pub mime_type: Option<String>,

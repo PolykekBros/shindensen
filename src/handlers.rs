@@ -1,7 +1,7 @@
 use axum::{
     extract::{
         ws::{Message as WsMessage, WebSocket},
-        FromRef, FromRequestParts, Path, State, WebSocketUpgrade,
+        FromRef, FromRequestParts, Multipart, Path, State, WebSocketUpgrade,
     },
     http::request::Parts,
     response::IntoResponse,
@@ -17,7 +17,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
 
 use crate::models::{
-    AppState, AuthResponse, Claims, CreateUser, InitiateChat, Message, User, UserId, WsMessageIn,
+    AppState, AuthResponse, Claims, CreateUser, FileUploadResponse, InitiateChat, Message, User,
+    UserId, WsMessageIn,
 };
 use crate::{
     errors::AppError,
@@ -60,13 +61,65 @@ where
     }
 }
 
+pub async fn upload_handler(
+    State(_state): State<AppState>,
+    _auth: AuthenticatedUser,
+    mut multipart: Multipart,
+) -> Result<Json<FileUploadResponse>, AppError> {
+    if let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| AppError::BadRequest(e.to_string()))?
+    {
+        let filename = field
+            .file_name()
+            .unwrap_or("unknown")
+            .to_string();
+        let mime_type = field
+            .content_type()
+            .map(|m| m.to_string());
+        let data = field
+            .bytes()
+            .await
+            .map_err(|e| AppError::BadRequest(e.to_string()))?;
+        let size_bytes = data.len() as i64;
+
+        let extension = std::path::Path::new(&filename)
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("bin");
+        
+        let unique_filename = format!("{}.{}", uuid::Uuid::new_v4(), extension);
+        let save_path = format!("uploads/{}", unique_filename);
+
+        tokio::fs::create_dir_all("uploads").await.map_err(|e| {
+            AppError::InternalServerError(format!("Failed to create uploads directory: {}", e))
+        })?;
+
+        tokio::fs::write(&save_path, data).await.map_err(|e| {
+            AppError::InternalServerError(format!("Failed to save file: {}", e))
+        })?;
+
+        let url = format!("/uploads/{}", unique_filename);
+
+        return Ok(Json(FileUploadResponse {
+            url,
+            filename,
+            mime_type,
+            size_bytes,
+        }));
+    }
+
+    Err(AppError::BadRequest("No file provided".to_string()))
+}
+
 pub async fn login_handler(
     State(state): State<AppState>,
     Json(payload): Json<CreateUser>,
 ) -> Result<Json<AuthResponse>, AppError> {
     let user: Option<User> = sqlx::query_as!(
         User,
-        r#"SELECT id as "id!", username as "username!", profile_file_id FROM users WHERE username = ?"#,
+        r#"SELECT id as "id!", username as "username!", image_id FROM users WHERE username = ?"#,
         payload.username
     )
     .fetch_optional(&state.pool)
@@ -84,7 +137,7 @@ pub async fn login_handler(
             User {
                 id,
                 username: payload.username.clone(),
-                profile_file_id: None,
+                image_id: None,
             }
         }
     };
@@ -113,9 +166,9 @@ pub async fn initiate_direct_chat_handler(
     auth: AuthenticatedUser,
     Json(payload): Json<InitiateChat>,
 ) -> Result<Json<InitiateDirectChatResponse>, AppError> {
-    let target = sqlx::query_as!(
+    let target: User = sqlx::query_as!(
         User,
-        r#"SELECT id as "id!", username as "username!", profile_file_id FROM users WHERE username = ?"#,
+        r#"SELECT id as "id!", username as "username!", image_id FROM users WHERE username = ?"#,
         payload.target_username
     )
     .fetch_optional(&state.pool)
@@ -168,25 +221,31 @@ async fn process_message(
     auth: &AuthenticatedUser,
     payload: WsMessageIn,
 ) -> Result<(), AppError> {
-    // Validation
-    let has_content = payload.content.as_ref().map(|s| !s.trim().is_empty()).unwrap_or(false);
+    let has_content = payload
+        .content
+        .as_ref()
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false);
     let files_in = payload.files.unwrap_or_default();
     let has_files = !files_in.is_empty();
-
     if !has_content && !has_files {
-        return Err(AppError::BadRequest("Message must have text or at least one file".to_string()));
+        return Err(AppError::BadRequest(
+            "Message must have text or at least one file".to_string(),
+        ));
     }
-
     if files_in.len() > 10 {
-        return Err(AppError::BadRequest("Maximum 10 files allowed per message".to_string()));
+        return Err(AppError::BadRequest(
+            "Maximum 10 files allowed per message".to_string(),
+        ));
     }
-
     for file in &files_in {
         if file.size_bytes > 10 * 1024 * 1024 {
-            return Err(AppError::BadRequest(format!("File {} exceeds 10MB limit", file.filename)));
+            return Err(AppError::BadRequest(format!(
+                "File {} exceeds 10MB limit",
+                file.filename
+            )));
         }
     }
-
     let is_participant = sqlx::query_scalar!(
         "SELECT 1 FROM chat_participants WHERE chat_id = ? AND user_id = ?",
         payload.chat_id,
@@ -200,11 +259,8 @@ async fn process_message(
             "Not authorized to send to this chat".to_string(),
         ));
     }
-
     let timestamp = chrono::Utc::now().to_rfc3339();
-    
     let mut tx = state.pool.begin().await?;
-
     let message_id = sqlx::query_scalar!(
         "INSERT INTO messages (chat_id, sender_id, content, timestamp) VALUES (?, ?, ?, ?) RETURNING id",
         payload.chat_id,
@@ -214,9 +270,7 @@ async fn process_message(
     )
     .fetch_one(&mut *tx)
     .await?;
-
     let mut db_files = Vec::new();
-
     for file_in in files_in {
         let file_id = sqlx::query_scalar!(
             r#"
@@ -231,7 +285,6 @@ async fn process_message(
         )
         .fetch_one(&mut *tx)
         .await?;
-
         sqlx::query!(
             "INSERT INTO message_files (message_id, file_id) VALUES (?, ?)",
             message_id,
@@ -239,7 +292,6 @@ async fn process_message(
         )
         .execute(&mut *tx)
         .await?;
-
         db_files.push(crate::models::MediaAsset {
             id: file_id,
             r#type: file_in.r#type,
@@ -250,9 +302,7 @@ async fn process_message(
             created_at: timestamp.clone(),
         });
     }
-
     tx.commit().await?;
-
     struct Participant {
         username: String,
     }
@@ -268,7 +318,6 @@ async fn process_message(
     )
     .fetch_all(&state.pool)
     .await?;
-
     let msg = Message {
         id: message_id,
         chat_id: payload.chat_id,
@@ -277,7 +326,6 @@ async fn process_message(
         timestamp,
         files: db_files,
     };
-    
     let msg_json = serde_json::to_string(&msg).unwrap();
     for p in participants {
         if let Some(sender_tx) = state.active_connections.get(&p.username) {
@@ -305,19 +353,17 @@ pub async fn get_history_handler(
             "Not authorized to view this chat".to_string(),
         ));
     }
-
     let mut messages = sqlx::query_as::<_, Message>(
         r#"
         SELECT id, chat_id, sender_id, content, timestamp
         FROM messages
         WHERE chat_id = ?
         ORDER BY timestamp ASC
-        "#
+        "#,
     )
     .bind(chat_id)
     .fetch_all(&state.pool)
     .await?;
-
     for msg in &mut messages {
         let files = sqlx::query_as!(
             crate::models::MediaAsset,
@@ -333,7 +379,6 @@ pub async fn get_history_handler(
         .await?;
         msg.files = files;
     }
-
     Ok(Json(messages))
 }
 

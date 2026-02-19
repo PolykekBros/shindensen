@@ -80,19 +80,71 @@ The server listens on `0.0.0.0:3000`.
     - Returns list of messages in the chat.
     - User must be a participant of the chat.
 
+### Files
+
+- `POST /upload` (Protected)
+    - Headers: `Authorization: Bearer <token>`, `Content-Type: multipart/form-data`
+    - Body: Multi-part form with a `file` field.
+    - Returns: Metadata about the uploaded file.
+      ```json
+      {
+        "url": "/uploads/uuid.ext",
+        "filename": "original_name.ext",
+        "mime_type": "image/png",
+        "size_bytes": 12345
+      }
+      ```
+    - Note: Files are served from `/uploads/*`.
+
 ### WebSocket
 
 - `GET /ws` (Protected)
     - Headers: `Authorization: Bearer <token>`
     - **Bidirectional**:
         - **Receive**: Real-time stream of incoming messages from ALL chats.
-            - Format: `{ "chat_id": 1, "sender": "bob", "content": "Hello", "timestamp": "..." }`
-        - **Send**: Send messages to a specific chat.
-            - Format: `{ "chat_id": 1, "content": "Hello via WS" }`
+            - Format:
+              ```json
+              {
+                "id": 123,
+                "chat_id": 1,
+                "sender_id": 45,
+                "content": "Hello",
+                "timestamp": "2026-02-19T12:00:00Z",
+                "files": [
+                  {
+                    "id": 10,
+                    "type": "picture",
+                    "url": "/uploads/uuid.ext",
+                    "filename": "image.png",
+                    "mime_type": "image/png",
+                    "size_bytes": 12345,
+                    "created_at": "..."
+                  }
+                ]
+              }
+              ```
+        - **Send**: Send messages to a specific chat, optionally with attachments.
+            - Format:
+              ```json
+              {
+                "chat_id": 1,
+                "content": "Check this out!",
+                "files": [
+                  {
+                    "type": "picture",
+                    "url": "/uploads/uuid.ext",
+                    "filename": "image.png",
+                    "mime_type": "image/png",
+                    "size_bytes": 12345
+                  }
+                ]
+              }
+              ```
 
 ## Testing
 
 1. **Login** (`POST /login`) to get a token.
 2. **Initiate Chat** (`POST /chats/initiate`) to get a `chat_id`.
-3. **Connect WebSocket** (`GET /ws`) with token.
-4. **Send Message** via WS: `{ "chat_id": <id>, "content": "Hello" }`.
+3. **Upload File** (`POST /upload`) to get a file URL if you want to send attachments.
+4. **Connect WebSocket** (`GET /ws`) with token.
+5. **Send Message** via WS: `{ "chat_id": <id>, "content": "Hello", "files": [...] }`.

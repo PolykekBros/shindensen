@@ -14,8 +14,11 @@ mod errors;
 mod handlers;
 mod models;
 
-use handlers::{get_history_handler, initiate_direct_chat_handler, login_handler, ws_handler};
+use handlers::{
+    get_history_handler, initiate_direct_chat_handler, login_handler, upload_handler, ws_handler,
+};
 use models::AppState;
+use tower_http::services::ServeDir;
 
 #[tokio::main]
 async fn main() {
@@ -37,6 +40,8 @@ async fn main() {
         .route("/login", post(login_handler))
         .route("/chats/initiate", post(initiate_direct_chat_handler))
         .route("/chats/:chat_id/messages", get(get_history_handler))
+        .route("/upload", post(upload_handler))
+        .nest_service("/uploads", ServeDir::new("uploads"))
         .route("/ws", get(ws_handler))
         .layer(TraceLayer::new_for_http())
         .with_state(state);

@@ -20,4 +20,4 @@ CREATE TABLE message_files (
 DROP TABLE IF EXISTS message_attachments;
 
 -- Update users table to allow a profile picture reference
-ALTER TABLE users ADD COLUMN profile_file_id INTEGER REFERENCES files(id) ON DELETE SET NULL;
+ALTER TABLE users ADD COLUMN image_id INTEGER REFERENCES files(id) ON DELETE SET NULL;
