@@ -168,7 +168,7 @@ pub async fn list_chats_handler(
     let chats = sqlx::query_as!(
         Chat,
         r#"
-        SELECT c.id as "id!", c.name, c.type as "type: ChatType", c.created_at as "created_at!"
+        SELECT c.id as "id!", c.name, c.chat_type as "chat_type: ChatType", c.created_at as "created_at!"
         FROM chats c
         JOIN chat_participants cp ON c.id = cp.chat_id
         WHERE cp.user_id = ?
@@ -201,7 +201,7 @@ pub async fn initiate_direct_chat_handler(
         FROM chats c
         JOIN chat_participants cp1 ON c.id = cp1.chat_id
         JOIN chat_participants cp2 ON c.id = cp2.chat_id
-        WHERE c.type = 'direct'
+        WHERE c.chat_type = 'direct'
           AND cp1.user_id = ?
           AND cp2.user_id = ?
         LIMIT 1
@@ -218,7 +218,7 @@ pub async fn initiate_direct_chat_handler(
         }));
     }
     let mut tx = state.pool.begin().await?;
-    let chat_id = sqlx::query_scalar!("INSERT INTO chats (type) VALUES (?) RETURNING id", "direct")
+    let chat_id = sqlx::query_scalar!("INSERT INTO chats (chat_type) VALUES (?) RETURNING id", "direct")
         .fetch_one(&mut *tx)
         .await?;
     sqlx::query!(

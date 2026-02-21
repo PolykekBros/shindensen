@@ -35,7 +35,7 @@ pub enum ChatType {
 pub struct Chat {
     pub id: ChatId,
     pub name: Option<String>,
-    pub r#type: ChatType, // 'type' is a reserved keyword in Rust
+    pub chat_type: ChatType,
     pub created_at: String,
 }
 

@@ -83,7 +83,7 @@ The server listens on `0.0.0.0:3000`.
         {
           "id": 1,
           "name": "General",
-          "type": "group",
+          "chat_type": "group",
           "created_at": "2026-02-19T12:00:00Z"
         }
       ]
