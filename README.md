@@ -75,6 +75,20 @@ The server listens on `0.0.0.0:3000`.
     - Returns: `{ "chat_id": 1, "status": "created" }` (or "exists")
     - Starts a direct chat with another user.
 
+- `GET /chats` (Protected)
+    - Headers: `Authorization: Bearer <token>`
+    - Returns: A list of all chats the user is a participant in.
+      ```json
+      [
+        {
+          "id": 1,
+          "name": "General",
+          "type": "group",
+          "created_at": "2026-02-19T12:00:00Z"
+        }
+      ]
+      ```
+
 - `GET /chats/:chat_id/messages` (Protected)
     - Headers: `Authorization: Bearer <token>`
     - Returns list of messages in the chat.

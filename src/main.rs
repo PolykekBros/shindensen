@@ -15,7 +15,8 @@ mod handlers;
 mod models;
 
 use handlers::{
-    get_history_handler, initiate_direct_chat_handler, login_handler, upload_handler, ws_handler,
+    get_history_handler, initiate_direct_chat_handler, list_chats_handler, login_handler,
+    upload_handler, ws_handler,
 };
 use models::AppState;
 use tower_http::services::ServeDir;
@@ -38,6 +39,7 @@ async fn main() {
     };
     let app = Router::new()
         .route("/login", post(login_handler))
+        .route("/chats", get(list_chats_handler))
         .route("/chats/initiate", post(initiate_direct_chat_handler))
         .route("/chats/:chat_id/messages", get(get_history_handler))
         .route("/upload", post(upload_handler))

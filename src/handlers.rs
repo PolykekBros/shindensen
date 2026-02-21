@@ -17,8 +17,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
 
 use crate::models::{
-    AppState, AuthResponse, Claims, CreateUser, FileUploadResponse, InitiateChat, Message, User,
-    UserId, WsMessageIn,
+    AppState, AuthResponse, Chat, ChatType, Claims, CreateUser, FileUploadResponse, InitiateChat,
+    Message, User, UserId, WsMessageIn,
 };
 use crate::{
     errors::AppError,
@@ -159,6 +159,27 @@ pub async fn login_handler(
     )
     .map_err(|_| AppError::InternalServerError("Token creation failed".to_string()))?;
     Ok(Json(AuthResponse { token }))
+}
+
+pub async fn list_chats_handler(
+    State(state): State<AppState>,
+    auth: AuthenticatedUser,
+) -> Result<Json<Vec<Chat>>, AppError> {
+    let chats = sqlx::query_as!(
+        Chat,
+        r#"
+        SELECT c.id as "id!", c.name, c.type as "type: ChatType", c.created_at as "created_at!"
+        FROM chats c
+        JOIN chat_participants cp ON c.id = cp.chat_id
+        WHERE cp.user_id = ?
+        ORDER BY c.created_at DESC
+        "#,
+        auth.user_id
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    Ok(Json(chats))
 }
 
 pub async fn initiate_direct_chat_handler(
