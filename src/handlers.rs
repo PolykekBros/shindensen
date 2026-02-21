@@ -119,7 +119,7 @@ pub async fn login_handler(
 ) -> Result<Json<AuthResponse>, AppError> {
     let user: Option<User> = sqlx::query_as!(
         User,
-        r#"SELECT id as "id!", username as "username!", image_id FROM users WHERE username = ?"#,
+        r#"SELECT id as "id!", username as "username!", display_name, bio, image_id FROM users WHERE username = ?"#,
         payload.username
     )
     .fetch_optional(&state.pool)
@@ -137,6 +137,8 @@ pub async fn login_handler(
             User {
                 id,
                 username: payload.username.clone(),
+                display_name: None,
+                bio: None,
                 image_id: None,
             }
         }
@@ -182,6 +184,22 @@ pub async fn list_chats_handler(
     Ok(Json(chats))
 }
 
+pub async fn get_user_handler(
+    State(state): State<AppState>,
+    Path(username): Path<String>,
+) -> Result<Json<User>, AppError> {
+    let user = sqlx::query_as!(
+        User,
+        r#"SELECT id as "id!", username as "username!", display_name, bio, image_id FROM users WHERE username = ?"#,
+        username
+    )
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| AppError::NotFound(format!("User '{}' not found", username)))?;
+
+    Ok(Json(user))
+}
+
 pub async fn initiate_direct_chat_handler(
     State(state): State<AppState>,
     auth: AuthenticatedUser,
@@ -189,7 +207,7 @@ pub async fn initiate_direct_chat_handler(
 ) -> Result<Json<InitiateDirectChatResponse>, AppError> {
     let target: User = sqlx::query_as!(
         User,
-        r#"SELECT id as "id!", username as "username!", image_id FROM users WHERE username = ?"#,
+        r#"SELECT id as "id!", username as "username!", display_name, bio, image_id FROM users WHERE username = ?"#,
         payload.target_username
     )
     .fetch_optional(&state.pool)

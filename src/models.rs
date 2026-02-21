@@ -20,6 +20,8 @@ pub struct AppState {
 pub struct User {
     pub id: UserId,
     pub username: String,
+    pub display_name: Option<String>,
+    pub bio: Option<String>,
     pub image_id: Option<FileId>,
 }
 

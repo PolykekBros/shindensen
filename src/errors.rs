@@ -11,6 +11,7 @@ pub enum AppError {
     DatabaseError(sqlx::Error),
     BadRequest(String),
     InternalServerError(String),
+    NotFound(String),
 }
 
 impl IntoResponse for AppError {
@@ -20,6 +21,7 @@ impl IntoResponse for AppError {
             AppError::DatabaseError(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
             AppError::InternalServerError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
+            AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
         };
 
         let body = Json(json!({

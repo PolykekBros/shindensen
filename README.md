@@ -64,15 +64,40 @@ The server listens on `0.0.0.0:3000`.
 
 - `POST /login`
     - Body: `{ "username": "alice" }`
-    - Returns: `{ "token": "..." }`
+    - Returns: 
+      ```json
+      {
+        "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+      }
+      ```
     - Creates user if not exists.
+
+- `GET /users/:username`
+    - Returns information about a specific user.
+    - Returns 404 if user does not exist.
+    - Sample response:
+      ```json
+      {
+        "id": 1,
+        "username": "alice",
+        "display_name": "Alice Wonderland", // Optional
+        "bio": "Curiouser and curiouser!", // Optional
+        "image_id": 42 // Optional
+      }
+      ```
 
 ### Chats
 
 - `POST /chats/initiate` (Protected)
     - Headers: `Authorization: Bearer <token>`
     - Body: `{ "target_username": "bob" }`
-    - Returns: `{ "chat_id": 1, "status": "created" }` (or "exists")
+    - Returns:
+      ```json
+      {
+        "chat_id": 1,
+        "status": "created" // or "exists"
+      }
+      ```
     - Starts a direct chat with another user.
 
 - `GET /chats` (Protected)
@@ -82,7 +107,7 @@ The server listens on `0.0.0.0:3000`.
       [
         {
           "id": 1,
-          "name": "General",
+          "name": "General", // Optional
           "chat_type": "group",
           "created_at": "2026-02-19T12:00:00Z"
         }
@@ -93,6 +118,29 @@ The server listens on `0.0.0.0:3000`.
     - Headers: `Authorization: Bearer <token>`
     - Returns list of messages in the chat.
     - User must be a participant of the chat.
+    - Sample response:
+      ```json
+      [
+        {
+          "id": 1,
+          "chat_id": 1,
+          "sender_id": 1,
+          "content": "Hello!", // Optional
+          "timestamp": "2026-02-19T12:00:00Z",
+          "files": [
+            {
+              "id": 10,
+              "type": "picture",
+              "url": "/uploads/uuid.ext",
+              "filename": "image.png",
+              "mime_type": "image/png", // Optional
+              "size_bytes": 12345,
+              "created_at": "2026-02-19T12:00:00Z"
+            }
+          ]
+        }
+      ]
+      ```
 
 ### Files
 
@@ -104,7 +152,7 @@ The server listens on `0.0.0.0:3000`.
       {
         "url": "/uploads/uuid.ext",
         "filename": "original_name.ext",
-        "mime_type": "image/png",
+        "mime_type": "image/png", // Optional
         "size_bytes": 12345
       }
       ```
@@ -122,7 +170,7 @@ The server listens on `0.0.0.0:3000`.
                 "id": 123,
                 "chat_id": 1,
                 "sender_id": 45,
-                "content": "Hello",
+                "content": "Hello", // Optional
                 "timestamp": "2026-02-19T12:00:00Z",
                 "files": [
                   {
@@ -130,7 +178,7 @@ The server listens on `0.0.0.0:3000`.
                     "type": "picture",
                     "url": "/uploads/uuid.ext",
                     "filename": "image.png",
-                    "mime_type": "image/png",
+                    "mime_type": "image/png", // Optional
                     "size_bytes": 12345,
                     "created_at": "..."
                   }
@@ -142,13 +190,13 @@ The server listens on `0.0.0.0:3000`.
               ```json
               {
                 "chat_id": 1,
-                "content": "Check this out!",
-                "files": [
+                "content": "Check this out!", // Optional
+                "files": [ // Optional
                   {
                     "type": "picture",
                     "url": "/uploads/uuid.ext",
                     "filename": "image.png",
-                    "mime_type": "image/png",
+                    "mime_type": "image/png", // Optional
                     "size_bytes": 12345
                   }
                 ]
