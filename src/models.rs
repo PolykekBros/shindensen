@@ -138,3 +138,9 @@ pub struct InitiateDirectChatResponse {
     pub chat_id: ChatId,
     pub status: ChatStatus,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ChatHistoryResponse {
+    pub chat_id: ChatId,
+    pub messages: Vec<Message>,
+}

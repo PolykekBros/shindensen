@@ -17,8 +17,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
 
 use crate::models::{
-    AppState, AuthResponse, Chat, ChatType, Claims, CreateUser, FileUploadResponse, InitiateChat,
-    Message, User, UserId, WsMessageIn,
+    AppState, AuthResponse, Chat, ChatHistoryResponse, ChatType, Claims, CreateUser,
+    FileUploadResponse, InitiateChat, Message, User, UserId, WsMessageIn,
 };
 use crate::{
     errors::AppError,
@@ -378,7 +378,7 @@ pub async fn get_history_handler(
     State(state): State<AppState>,
     auth: AuthenticatedUser,
     Path(chat_id): Path<i64>,
-) -> Result<Json<Vec<Message>>, AppError> {
+) -> Result<Json<ChatHistoryResponse>, AppError> {
     let is_participant = sqlx::query_scalar!(
         "SELECT 1 FROM chat_participants WHERE chat_id = ? AND user_id = ?",
         chat_id,
@@ -418,7 +418,10 @@ pub async fn get_history_handler(
         .await?;
         msg.files = files;
     }
-    Ok(Json(messages))
+    Ok(Json(ChatHistoryResponse {
+        chat_id,
+        messages,
+    }))
 }
 
 pub async fn ws_handler(

@@ -120,26 +120,29 @@ The server listens on `0.0.0.0:3000`.
     - User must be a participant of the chat.
     - Sample response:
       ```json
-      [
-        {
-          "id": 1,
-          "chat_id": 1,
-          "sender_id": 1,
-          "content": "Hello!", // Optional
-          "timestamp": "2026-02-19T12:00:00Z",
-          "files": [
-            {
-              "id": 10,
-              "type": "picture",
-              "url": "/uploads/uuid.ext",
-              "filename": "image.png",
-              "mime_type": "image/png", // Optional
-              "size_bytes": 12345,
-              "created_at": "2026-02-19T12:00:00Z"
-            }
-          ]
-        }
-      ]
+      {
+        "chat_id": 1,
+        "messages": [
+          {
+            "id": 1,
+            "chat_id": 1,
+            "sender_id": 1,
+            "content": "Hello!", // Optional
+            "timestamp": "2026-02-19T12:00:00Z",
+            "files": [
+              {
+                "id": 10,
+                "type": "picture",
+                "url": "/uploads/uuid.ext",
+                "filename": "image.png",
+                "mime_type": "image/png", // Optional
+                "size_bytes": 12345,
+                "created_at": "2026-02-19T12:00:00Z"
+              }
+            ]
+          }
+        ]
+      }
       ```
 
 ### Files
