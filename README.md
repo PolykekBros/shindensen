@@ -72,8 +72,8 @@ The server listens on `0.0.0.0:3000`.
       ```
     - Creates user if not exists.
 
-- `GET /users/:username`
-    - Returns information about a specific user.
+- `GET /users/:id`
+    - Returns information about a specific user by their ID.
     - Returns 404 if user does not exist.
     - Sample response:
       ```json
@@ -86,11 +86,27 @@ The server listens on `0.0.0.0:3000`.
       }
       ```
 
+- `GET /users?username=alice`
+    - Search for users by username. Supports partial matches.
+    - Returns a list of users.
+    - Sample response:
+      ```json
+      [
+        {
+          "id": 1,
+          "username": "alice",
+          "display_name": "Alice Wonderland",
+          "bio": "Curiouser and curiouser!",
+          "image_id": 42
+        }
+      ]
+      ```
+
 ### Chats
 
 - `POST /chats/initiate` (Protected)
     - Headers: `Authorization: Bearer <token>`
-    - Body: `{ "target_username": "bob" }`
+    - Body: `{ "target_id": 2 }`
     - Returns:
       ```json
       {

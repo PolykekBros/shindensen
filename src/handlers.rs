@@ -1,7 +1,7 @@
 use axum::{
     extract::{
         ws::{Message as WsMessage, WebSocket},
-        FromRef, FromRequestParts, Multipart, Path, State, WebSocketUpgrade,
+        FromRef, FromRequestParts, Multipart, Path, Query, State, WebSocketUpgrade,
     },
     http::request::Parts,
     response::IntoResponse,
@@ -18,7 +18,7 @@ use tokio::sync::broadcast;
 
 use crate::models::{
     AppState, AuthResponse, Chat, ChatHistoryResponse, ChatType, Claims, CreateUser,
-    FileUploadResponse, InitiateChat, Message, User, UserId, WsMessageIn,
+    FileUploadResponse, InitiateChat, Message, User, UserId, UserSearchQuery, WsMessageIn,
 };
 use crate::{
     errors::AppError,
@@ -186,18 +186,43 @@ pub async fn list_chats_handler(
 
 pub async fn get_user_handler(
     State(state): State<AppState>,
-    Path(username): Path<String>,
+    Path(user_id): Path<UserId>,
 ) -> Result<Json<User>, AppError> {
     let user = sqlx::query_as!(
         User,
-        r#"SELECT id as "id!", username as "username!", display_name, bio, image_id FROM users WHERE username = ?"#,
-        username
+        r#"SELECT id as "id!", username as "username!", display_name, bio, image_id FROM users WHERE id = ?"#,
+        user_id
     )
     .fetch_optional(&state.pool)
     .await?
-    .ok_or_else(|| AppError::NotFound(format!("User '{}' not found", username)))?;
+    .ok_or_else(|| AppError::NotFound(format!("User with ID {} not found", user_id)))?;
 
     Ok(Json(user))
+}
+
+pub async fn search_users_handler(
+    State(state): State<AppState>,
+    Query(query): Query<UserSearchQuery>,
+) -> Result<Json<Vec<User>>, AppError> {
+    let users = if let Some(username) = query.username {
+        let pattern = format!("%{}%", username);
+        sqlx::query_as!(
+            User,
+            r#"SELECT id as "id!", username as "username!", display_name, bio, image_id FROM users WHERE username LIKE ?"#,
+            pattern
+        )
+        .fetch_all(&state.pool)
+        .await?
+    } else {
+        sqlx::query_as!(
+            User,
+            r#"SELECT id as "id!", username as "username!", display_name, bio, image_id FROM users"#
+        )
+        .fetch_all(&state.pool)
+        .await?
+    };
+
+    Ok(Json(users))
 }
 
 pub async fn initiate_direct_chat_handler(
@@ -207,12 +232,12 @@ pub async fn initiate_direct_chat_handler(
 ) -> Result<Json<InitiateDirectChatResponse>, AppError> {
     let target: User = sqlx::query_as!(
         User,
-        r#"SELECT id as "id!", username as "username!", display_name, bio, image_id FROM users WHERE username = ?"#,
-        payload.target_username
+        r#"SELECT id as "id!", username as "username!", display_name, bio, image_id FROM users WHERE id = ?"#,
+        payload.target_id
     )
     .fetch_optional(&state.pool)
     .await?
-    .ok_or(AppError::BadRequest("Target user not found".to_string()))?;
+    .ok_or_else(|| AppError::NotFound("Target user not found".to_string()))?;
     let chat_id = sqlx::query_scalar!(
         r#"
         SELECT c.id

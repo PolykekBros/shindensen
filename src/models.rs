@@ -87,7 +87,7 @@ pub struct CreateUser {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct InitiateChat {
-    pub target_username: String, // For starting a direct chat
+    pub target_id: UserId, // For starting a direct chat
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -143,4 +143,9 @@ pub struct InitiateDirectChatResponse {
 pub struct ChatHistoryResponse {
     pub chat_id: ChatId,
     pub messages: Vec<Message>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UserSearchQuery {
+    pub username: Option<String>,
 }

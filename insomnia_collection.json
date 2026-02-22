@@ -110,7 +110,7 @@
             "method": "POST",
             "body": {
                 "mimeType": "application/json",
-                "text": "{\n  \"target_username\": \"bob\"\n}"
+                "text": "{\n  \"target_id\": 2\n}"
             },
             "parameters": [],
             "headers": [
@@ -150,6 +150,63 @@
                 "token": "{{ _.token }}"
             },
             "metaSortKey": -1708334100000,
+            "isPrivate": false,
+            "settingStoreCookies": true,
+            "settingSendCookies": true,
+            "settingDisableRenderRequestBody": false,
+            "settingEncodeUrl": true,
+            "settingRebuildPath": true,
+            "settingFollowRedirects": "global",
+            "_type": "request"
+        },
+        {
+            "_id": "req_get_user_by_id",
+            "parentId": "wrk_shindensen_api",
+            "modified": 1708334400000,
+            "created": 1708334400000,
+            "url": "{{ _.base_url }}/users/1",
+            "name": "Get User by ID",
+            "description": "",
+            "method": "GET",
+            "body": {},
+            "parameters": [],
+            "headers": [],
+            "authentication": {
+                "type": "bearer",
+                "token": "{{ _.token }}"
+            },
+            "metaSortKey": -1708334050000,
+            "isPrivate": false,
+            "settingStoreCookies": true,
+            "settingSendCookies": true,
+            "settingDisableRenderRequestBody": false,
+            "settingEncodeUrl": true,
+            "settingRebuildPath": true,
+            "settingFollowRedirects": "global",
+            "_type": "request"
+        },
+        {
+            "_id": "req_search_users",
+            "parentId": "wrk_shindensen_api",
+            "modified": 1708334400000,
+            "created": 1708334400000,
+            "url": "{{ _.base_url }}/users",
+            "name": "Search Users",
+            "description": "",
+            "method": "GET",
+            "body": {},
+            "parameters": [
+                {
+                    "name": "username",
+                    "value": "alice"
+                }
+            ],
+            "headers": [],
+            "authentication": {
+                "type": "bearer",
+                "token": "{{ _.token }}"
+            },
+            "metaSortKey": -1708334025000,
             "isPrivate": false,
             "settingStoreCookies": true,
             "settingSendCookies": true,
