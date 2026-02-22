@@ -22,6 +22,9 @@ These instructions guide the agent's behavior for the Shindensen messenger backe
         4. `ALTER TABLE new_table RENAME TO old_table`.
     - **Verify**: Always check the impact of a migration on existing data before applying it.
 
+## Coding Standards
+- **Strong Typing for IDs**: Always use specific ID type aliases (`UserId`, `ChatId`, `MessageId`, `FileId`) instead of primitive types like `i64` or `i16` for any variables, parameters, or struct fields representing database IDs. These are defined in `src/models.rs`.
+
 ## Testing & Verification
 - After making changes or applying migrations, run `cargo check` to ensure compile-time SQL queries (if any) are still valid.
 - If possible, verify the API changes with manual requests or by checking the auto-generated types if using a frontend integration.

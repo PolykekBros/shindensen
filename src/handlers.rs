@@ -17,7 +17,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
 
 use crate::models::{
-    AppState, AuthResponse, Chat, ChatHistoryResponse, ChatType, Claims, CreateUser,
+    AppState, AuthResponse, Chat, ChatId, ChatHistoryResponse, ChatType, Claims, CreateUser,
     FileUploadResponse, InitiateChat, Message, User, UserId, UserSearchQuery, WsMessageIn,
 };
 use crate::{
@@ -167,8 +167,7 @@ pub async fn list_chats_handler(
     State(state): State<AppState>,
     auth: AuthenticatedUser,
 ) -> Result<Json<Vec<Chat>>, AppError> {
-    let chats = sqlx::query_as!(
-        Chat,
+    let rows = sqlx::query!(
         r#"
         SELECT c.id as "id!", c.name, c.chat_type as "chat_type: ChatType", c.created_at as "created_at!"
         FROM chats c
@@ -180,6 +179,24 @@ pub async fn list_chats_handler(
     )
     .fetch_all(&state.pool)
     .await?;
+
+    let mut chats = Vec::new();
+    for row in rows {
+        let participants = sqlx::query_scalar!(
+            "SELECT user_id FROM chat_participants WHERE chat_id = ?",
+            row.id
+        )
+        .fetch_all(&state.pool)
+        .await?;
+
+        chats.push(Chat {
+            id: row.id,
+            name: row.name,
+            chat_type: row.chat_type,
+            created_at: row.created_at,
+            participants,
+        });
+    }
 
     Ok(Json(chats))
 }
@@ -399,10 +416,58 @@ async fn process_message(
     Ok(())
 }
 
+pub async fn get_chat_handler(
+    State(state): State<AppState>,
+    auth: AuthenticatedUser,
+    Path(chat_id): Path<ChatId>,
+) -> Result<Json<Chat>, AppError> {
+    let is_participant = sqlx::query_scalar!(
+        "SELECT 1 FROM chat_participants WHERE chat_id = ? AND user_id = ?",
+        chat_id,
+        auth.user_id
+    )
+    .fetch_optional(&state.pool)
+    .await?
+    .is_some();
+
+    if !is_participant {
+        return Err(AppError::AuthError(
+            "Not authorized to view this chat info".to_string(),
+        ));
+    }
+
+    let row = sqlx::query!(
+        r#"
+        SELECT id as "id!", name, chat_type as "chat_type: ChatType", created_at as "created_at!"
+        FROM chats
+        WHERE id = ?
+        "#,
+        chat_id
+    )
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| AppError::NotFound(format!("Chat with ID {} not found", chat_id)))?;
+
+    let participants = sqlx::query_scalar!(
+        "SELECT user_id FROM chat_participants WHERE chat_id = ?",
+        chat_id
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    Ok(Json(Chat {
+        id: row.id,
+        name: row.name,
+        chat_type: row.chat_type,
+        created_at: row.created_at,
+        participants,
+    }))
+}
+
 pub async fn get_history_handler(
     State(state): State<AppState>,
     auth: AuthenticatedUser,
-    Path(chat_id): Path<i64>,
+    Path(chat_id): Path<ChatId>,
 ) -> Result<Json<ChatHistoryResponse>, AppError> {
     let is_participant = sqlx::query_scalar!(
         "SELECT 1 FROM chat_participants WHERE chat_id = ? AND user_id = ?",

@@ -125,9 +125,24 @@ The server listens on `0.0.0.0:3000`.
           "id": 1,
           "name": "General", // Optional
           "chat_type": "group",
-          "created_at": "2026-02-19T12:00:00Z"
+          "created_at": "2026-02-19T12:00:00Z",
+          "participants": [1, 2, 3]
         }
       ]
+      ```
+
+- `GET /chats/:chat_id` (Protected)
+    - Headers: `Authorization: Bearer <token>`
+    - Returns metadata for a specific chat.
+    - Sample response:
+      ```json
+      {
+        "id": 1,
+        "name": "General", // Optional
+        "chat_type": "group",
+        "created_at": "2026-02-19T12:00:00Z",
+        "participants": [1, 2, 3]
+      }
       ```
 
 - `GET /chats/:chat_id/messages` (Protected)

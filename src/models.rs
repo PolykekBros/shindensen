@@ -39,6 +39,8 @@ pub struct Chat {
     pub name: Option<String>,
     pub chat_type: ChatType,
     pub created_at: String,
+    #[sqlx(skip)]
+    pub participants: Vec<UserId>,
 }
 
 #[allow(dead_code)]
