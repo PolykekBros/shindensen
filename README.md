@@ -194,9 +194,27 @@ The server listens on `0.0.0.0:3000`.
 
 ### WebSocket
 
-- `GET /ws` (Protected)
-    - Headers: `Authorization: Bearer <token>`
-    - **Bidirectional**:
+- `GET /ws`
+    - **Authentication**: Connect without headers. You **must** authenticate within 10 seconds.
+    - **Phase 1: Identify**: Send the following payload immediately after connecting:
+      ```json
+      {
+        "op": "IDENTIFY",
+        "d": {
+          "token": "YOUR_JWT_HERE"
+        }
+      }
+      ```
+    - **Phase 2: Ready**: If the token is valid, the server responds with:
+      ```json
+      {
+        "op": "READY",
+        "d": {
+          "user_id": 123
+        }
+      }
+      ```
+    - **Bidirectional Messages (After READY)**:
         - **Receive**: Real-time stream of incoming messages from ALL chats.
             - Format:
               ```json
@@ -236,11 +254,15 @@ The server listens on `0.0.0.0:3000`.
                 ]
               }
               ```
+    - **Error Handling**: 
+        - If authentication fails or times out (10s), the connection is closed with code `404 (Authentication Failed)`.
 
 ## Testing
 
 1. **Login** (`POST /login`) to get a token.
 2. **Initiate Chat** (`POST /chats/initiate`) to get a `chat_id`.
 3. **Upload File** (`POST /upload`) to get a file URL if you want to send attachments.
-4. **Connect WebSocket** (`GET /ws`) with token.
-5. **Send Message** via WS: `{ "chat_id": <id>, "content": "Hello", "files": [...] }`.
+4. **Connect WebSocket** (`GET /ws`) without headers.
+5. **Identify**: Send `{"op": "IDENTIFY", "d": {"token": "..."}}`.
+6. **Wait for READY**: Ensure you receive `{"op": "READY", ...}`.
+7. **Send Message** via WS: `{ "chat_id": <id>, "content": "Hello", "files": [...] }`.

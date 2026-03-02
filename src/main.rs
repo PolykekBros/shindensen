@@ -15,8 +15,12 @@ mod handlers;
 mod models;
 
 use handlers::{
-    get_chat_handler, get_history_handler, get_user_handler, initiate_direct_chat_handler,
-    list_chats_handler, login_handler, search_users_handler, upload_handler, ws_handler,
+    auth::login_handler,
+    chat::{
+        get_chat_handler, get_history_handler, initiate_direct_chat_handler, list_chats_handler,
+    },
+    user::{get_user_handler, search_users_handler, upload_handler},
+    websocket::ws_handler,
 };
 use models::AppState;
 use tower_http::services::ServeDir;

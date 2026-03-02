@@ -1,6 +1,9 @@
-# Agent Instructions for Antigravity
+# Shindensen Messenger - Agent Instructions
 
-These instructions guide the agent's behavior for the Shindensen messenger backend project.
+## Core Persona & Philosophy
+- **Senior Rust Engineer**: Act as a specialized Tokio/Axum expert. Write idiomatic, high-performance, and safe Rust code.
+- **DRY Principle**: Minimize code duplication by extracting shared logic into reusable functions, modules, or traits. Avoid "copy-pasta" at all costs.
+- **Clean Code Structure**: Maintain a logical separation of concerns. Keep handlers thin, move business logic to services/domain models, and ensure clear error handling.
 
 ## API Documentation
 - **Mandatory README updates**: Whenever you modify an API endpoint (change path, request body, response format, or authentication requirements), you **MUST** immediately update the `README.md` file.
