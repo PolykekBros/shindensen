@@ -15,8 +15,8 @@ mod handlers;
 mod models;
 
 use handlers::{
-    get_history_handler, get_user_handler, initiate_direct_chat_handler, list_chats_handler,
-    get_chat_handler, login_handler, search_users_handler, upload_handler, ws_handler,
+    get_chat_handler, get_history_handler, get_user_handler, initiate_direct_chat_handler,
+    list_chats_handler, login_handler, search_users_handler, upload_handler, ws_handler,
 };
 use models::AppState;
 use tower_http::services::ServeDir;
@@ -27,6 +27,10 @@ async fn main() {
     tracing_subscriber::fmt::init();
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let jwt_secret = env::var("JWT_SECRET").expect("JWT_SECRET must be set");
+    let is_dev = env::var("DEV")
+        .unwrap_or("false".to_string())
+        .parse::<bool>()
+        .expect("DEV must be true/false");
     let pool = SqlitePoolOptions::new()
         .max_connections(5)
         .connect(&database_url)
@@ -37,7 +41,7 @@ async fn main() {
         active_connections: Arc::new(DashMap::new()),
         jwt_secret,
     };
-    let app = Router::new()
+    let mut app = Router::new()
         .route("/login", post(login_handler))
         .route("/users/:id", get(get_user_handler))
         .route("/users", get(search_users_handler))
@@ -50,6 +54,14 @@ async fn main() {
         .route("/ws", get(ws_handler))
         .layer(TraceLayer::new_for_http())
         .with_state(state);
+    if is_dev {
+        use tower_http::cors::{Any, CorsLayer};
+        let cors = CorsLayer::new()
+            .allow_origin(Any)
+            .allow_methods(Any)
+            .allow_headers(Any);
+        app = app.layer(cors);
+    }
     let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();
     tracing::info!("listening on {}", listener.local_addr().unwrap());
     axum::serve(listener, app).await.unwrap();
